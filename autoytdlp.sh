@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+debug=0
 watching=1
 links=()
 
@@ -24,6 +25,11 @@ sigint () {
 ytlink () {
     echo -n "$1" | \
     sed -E 's#^https?://([A-Za-z0-9.-]+/watch\?v=|(yt\.be|youtu\.be)/)([A-Za-z0-9_-]+)|.+#\3#'
+}
+
+safename () {
+    safe="${1//[^A-Za-z0-9А-Яа-я ().,_-]/}"
+    echo "${safe// /_}" | sed -E 's/_+/_/'
 }
 
 bold () {
@@ -67,13 +73,20 @@ dlwith_piped () {
         echo "Parsing link"
         video_id=$(ytlink "$link")
 
+        if [[ $video_id == "" ]]; then
+            echo 'Unable to parse YT video ID, skipping'
+            continue
+        fi
+        echo "Found YT video ID: $video_id"
+
         echo "Requesting URL for $link"
-        video_obj=$(curl -sL "https://ytapi.dc09.ru/streams/$video_id" | jq "$jqexpr")
+        video_obj=$(curl -sL "https://ytapi.dc09.ru/streams/$video_id")
 
-        video_url=$(echo "$video_obj" | jq ".url" | sed s/^\"// | sed s/\"$//)
+        stream_obj=$(echo "$video_obj" | jq "$jqexpr")
+        stream_url=$(echo "$stream_obj" | jq ".url" | sed s/^\"// | sed s/\"$//)
 
-        video_mime=$(echo "$video_obj" | jq ".mimeType")
-        case "$video_mime" in
+        stream_mime=$(echo "$stream_obj" | jq ".mimeType")
+        case "$stream_mime" in
             "\"audio/mp4\"")
                 ext='m4a'
                 ;;
@@ -91,10 +104,16 @@ dlwith_piped () {
                 ;;
         esac
 
-        video_file="./files/${video_id}.${ext}"
+        video_title=$(echo "$video_obj" | jq ".title")
+        video_file="./files/$(safename "$video_title").${ext}"
+        echo "Filename: $video_file"
+
+        if [[ $debug == 1 ]]
+        then continue
+        fi
         
         echo "Downloading with wget"
-        wget -O "$video_file" "$video_url"
+        wget -O "$video_file" "$stream_url"
 
         echo
     done
@@ -109,6 +128,12 @@ dlwith_ytdlp () {
     echo 'details: https://github.com/yt-dlp/yt-dlp#format-selection'
     read -r format
 
+    if [[ $format == "" ]]; then
+        echo 'Passed an empty string,'
+        echo 'using "b" as default.'
+        format="b"
+    fi
+
     echo
     bold 'Started'
     echo
@@ -118,14 +143,26 @@ dlwith_ytdlp () {
         video_id=$(ytlink "$link")
         if [[ $video_id != "" ]]; then
             # Convert YT and Piped links to YT
+            echo "Found YT video ID: $video_id"
             newlink="https://youtube.com/watch?v=$video_id"
         else
             newlink="$link"
         fi
-
         echo "URL: $newlink"
 
-        yt-dlp -f "$format" -o "%(id)s.%(ext)s" -P ./files/ "$newlink"
+        echo "Generating safe name for the file"
+        video_title=$(yt-dlp --print title "$newlink")
+        video_file="$(safename "$video_title")---%(id)s.%(ext)s"
+        echo "Template: $video_file"
+
+        if [[ $debug == 1 ]]
+        then continue
+        fi
+
+        echo "Downloading with yt-dlp"
+        yt-dlp -f "$format" -o "$video_file" -P ./files/ "$newlink"
+
+        echo
     done
 }
 
