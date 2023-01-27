@@ -3,6 +3,8 @@
 debug=0
 watching=1
 links=()
+success=0
+error=0
 
 # -------
 # Helpers
@@ -113,7 +115,15 @@ dlwith_piped () {
         fi
         
         echo "Downloading with wget"
-        wget -O "$video_file" "$stream_url"
+
+        if wget -O "$video_file" "$stream_url"
+        then
+            bold "OK"
+            success=$(( success + 1 ))
+        else
+            bold "Error"
+            error=$(( error + 1 ))
+        fi
 
         echo
     done
@@ -160,7 +170,15 @@ dlwith_ytdlp () {
         fi
 
         echo "Downloading with yt-dlp"
-        yt-dlp -f "$format" -o "$video_file" -P ./files/ "$newlink"
+        
+        if yt-dlp -f "$format" -o "$video_file" -P ./files/ "$newlink"
+        then
+            bold "OK"
+            success=$(( success + 1 ))
+        else
+            bold "Error"
+            error=$(( error + 1 ))
+        fi
 
         echo
     done
@@ -233,6 +251,11 @@ main() {
     else
         dlwith_ytdlp
     fi
+
+    # Show result
+    bold "Downloaded: $success"
+    bold "Errors: $error"
+    echo
 
     # Waiting for the response
     echo 'Press Ctrl+C to exit'
