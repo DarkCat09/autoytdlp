@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 trap 'echo; echo "Exit"; exit 0' SIGINT
+mkdir -p ./convert
 
 echo "Enter input files extension:"
 echo "(empty string to match all)"
