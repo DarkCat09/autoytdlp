@@ -19,4 +19,4 @@ copy_arg=$(ask)
 echo
 
 find "$directory" -type f -name "*.mp3" -exec \
-bash ./.id3tag_helper.sh "$copy_arg" {} \;
+python3 ./.id3tag_helper.py "$copy_arg" {} \;
