@@ -83,9 +83,18 @@ def main() -> None:
     else:
         if correct != '':
             title = correct.lower()
-        url = search_azurl(title)
-        print(url)
-        parsed = parse_azlyrics(url)
+        try:
+            url = search_azurl(title)
+            print(url)
+            parsed = parse_azlyrics(url)
+        except Exception as err:
+            print(err)
+            print(
+                'In most cases, this error means '
+                'the script have received some incorrect data, '
+                'so you should enter song info manually.'
+            )
+            parsed = manual_info_input()
 
     #print(parsed)
     tagmp3(file, parsed, copy)
@@ -187,108 +196,75 @@ def parse_azlyrics(link: str) -> ParseResult:
 
     artist_elem = soup.select_one(f'{LYRICS_ROW}>.lyricsh>h2')
     if artist_elem is None:
-        print('Unable to parse artist name')
-        result['artist'] = input('Enter the artist name: ')
-    else:
-        result['artist'] = artist_elem.get_text() \
-            .removesuffix(' Lyrics') \
-            .strip()
+        raise ParseError('artist name')
+    result['artist'] = artist_elem.get_text() \
+        .removesuffix(' Lyrics') \
+        .strip()
 
     title_elem = soup.select_one(f'{LYRICS_ROW}>b')
     if title_elem is None:
-        print('Unable to parse song title')
-        result['title'] = input('Enter the title: ')
-    else:
-        result['title'] = title_elem.get_text().strip('" ')
+        raise ParseError('song title')
+    result['title'] = title_elem.get_text().strip('" ')
 
     album_blocks = soup.select('.songinalbum_title')
     album = None
 
     if len(album_blocks) > 1:
         album = album_blocks[-2]
-
     elif len(album_blocks) > 0:
         album = album_blocks[0]
-    
-    if album is None:
-        album_re = None
     else:
-        album_re = re.search(
-            r'album:\s*"(.+?)"\s*\((\d+)\)',
-            album.get_text()
+        raise ParseError('album name')
+
+    album_re = re.search(
+        r'album:\s*"(.+?)"\s*\((\d+)\)',
+        album.get_text()
+    )
+    if album_re is None:
+        raise ParseError('album name')
+    
+    result['album'] = album_re[1]
+    result['year'] = int(album_re[2])
+
+    cover = album.select_one('img.album-image')
+
+    if cover is not None:
+
+        cover_url = str(cover.get('src'))
+        if cover_url.startswith('/'):
+            cover_url = BASEURL + cover_url
+
+        req = session.get(cover_url)
+        result['cover'] = req.content
+        result['cover_mime'] = req.headers.get(
+            'Content-Type', 'image/jpeg'
+        )
+    
+    tracklist_elem = soup.select_one('.songlist-panel')
+    if tracklist_elem is not None:
+
+        tracklist = tracklist_elem.select(
+            '.listalbum-item'
+        )
+        result['tracks'] = len(tracklist)
+
+        current_url = re.search(
+            r'/(lyrics/.+?\.html)',
+            link,
         )
 
-    if album_re is None:
-        print('Unable to parse album name')
-        result['album'] = input('Enter the album name: ')
-        result['year'] = input_num('Enter the release year: ')
-        result['track_no'] = input_num('This is the track #')
-        result['tracks'] = input_num('Number of tracks in the album: ')
+        result['track_no'] = 0
+        if current_url is not None:
+            for i, track in enumerate(tracklist):
 
-        cover = input('Insert an album cover? [Y/n] ')
-        if cover.lower() not in ('n','н'):
-            try:
-                print(
-                    'Download the cover and enter its path:',
-                    '(relative path is not recommended)',
-                    sep='\n',
-                )
-                cover_file = Path(input().strip())
+                track_url = track.select_one('a')
+                if track_url is None:
+                    continue
 
-                with cover_file.open('rb') as f:
-                    result['cover'] = f.read()
-
-                result['cover_mime'] = (
-                    mimetypes.guess_type(cover_file)[0]
-                    or 'image/jpeg'
-                )
-            except Exception as err:
-                logging.exception(err)
-
-    else:
-        result['album'] = album_re[1]
-        result['year'] = int(album_re[2])
-
-        assert album is not None
-        cover = album.select_one('img.album-image')
-
-        if cover is not None:
-
-            cover_url = str(cover.get('src'))
-            if cover_url.startswith('/'):
-                cover_url = BASEURL + cover_url
-
-            req = session.get(cover_url)
-            result['cover'] = req.content
-            result['cover_mime'] = req.headers.get(
-                'Content-Type', 'image/jpeg'
-            )
-    
-        tracklist_elem = soup.select_one('.songlist-panel')
-        if tracklist_elem is not None:
-
-            tracklist = tracklist_elem.select(
-                '.listalbum-item'
-            )
-            result['tracks'] = len(tracklist)
-
-            current_url = re.search(
-                r'/(lyrics/.+?\.html)',
-                link,
-            )
-
-            result['track_no'] = 0
-            if current_url is not None:
-                for i, track in enumerate(tracklist):
-
-                    track_url = track.select_one('a')
-                    if track_url is None:
-                        continue
-
-                    track_href = str(track_url.get('href'))
-                    if current_url[0] in track_href:
-                        result['track_no'] = (i + 1)
-                        break
+                track_href = str(track_url.get('href'))
+                if current_url[0] in track_href:
+                    result['track_no'] = (i + 1)
+                    break
 
     return result
 
