@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-debug=1
+debug=0
 watching=1
 links=()
 success=0
