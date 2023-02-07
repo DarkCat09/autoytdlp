@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-debug=0
+debug=1
 watching=1
 links=()
 success=0
@@ -43,6 +43,12 @@ bold () {
 
 dlwith_piped () {
 
+    bold 'Enter Piped API instance URL'
+    bold '(ytapi.dc09.ru is used by default)'
+    read -r pipedurl
+    pipedurl="${pipedurl:-ytapi.dc09.ru}"
+    pipedurl=$(echo "$pipedurl" | sed -E 's#https?://##')
+
     bold 'Choose the type of stream: 1.audio or 2.video'
     read -r stream_num
     if [[ $stream_num == 1 ]]; then
@@ -56,15 +62,10 @@ dlwith_piped () {
     jqexpr=".${stream}Streams|map(select(.videoOnly==false))|max_by(${maxby})"
 
     echo
-    bold 'Here is an expression for JQ utility.'
-    echo 'Press Enter to leave it intact, or type another expression.'
-    echo "$jqexpr"
-    read -r newexpr
-    if [[ $newexpr == "" ]]; then
-        :
-    else
-        jqexpr="$newexpr"
-    fi
+    bold 'Here is an expression for JQ utility'
+    echo 'Correct it or just press Enter'
+    read -e -r -i "$jqexpr" newexpr
+    jqexpr="${newexpr:-$jqexpr}"
 
     echo
     bold 'Started'
@@ -82,7 +83,7 @@ dlwith_piped () {
         echo "Found YT video ID: $video_id"
 
         echo "Requesting URL for $link"
-        video_obj=$(curl -sL "https://ytapi.dc09.ru/streams/$video_id")
+        video_obj=$(curl -sL "https://$pipedurl/streams/$video_id")
 
         stream_obj=$(echo "$video_obj" | jq "$jqexpr")
         stream_url=$(echo "$stream_obj" | jq ".url" | sed s/^\"// | sed s/\"$//)
@@ -135,14 +136,10 @@ dlwith_ytdlp () {
     echo 'Use "b" without quotes for video and audio'
     echo '    "bv" to download only video'
     echo '    "ba" to download only audio'
-    echo 'details: https://github.com/yt-dlp/yt-dlp#format-selection'
-    read -r format
-
-    if [[ $format == "" ]]; then
-        echo 'Passed an empty string,'
-        echo 'using "b" as default.'
-        format="b"
-    fi
+    echo 'Defaults to "b" if an empty string is passed'
+    echo 'Details: https://github.com/yt-dlp/yt-dlp#format-selection'
+    read -e -r format
+    format="${format:-b}"
 
     echo
     bold 'Started'

@@ -6,10 +6,7 @@ mkdir -p ./convert
 echo "Enter input files extension:"
 echo "(empty string to match all)"
 read -r ext_input
-
-if [[ $ext_input == "" ]]; then
-    ext_input="*"
-fi
+ext_input="${ext_input:-*}"
 
 echo "Enter output files extension:"
 echo "(must not be empty)"
