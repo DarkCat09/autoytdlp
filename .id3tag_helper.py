@@ -31,6 +31,10 @@ USERAGENT = (
 
 LYRICS_ROW = '.main-page>.row>.col-xs-12'
 
+safename_re = re.compile(
+    r'[^A-Za-z0-9А-ЯЁа-яё \'".,()\[\]&!#$@_~=*+-]'
+)
+
 session = requests.Session()
 session.headers['User-Agent'] = USERAGENT
 
@@ -93,6 +97,11 @@ def input_num(msg: str, def_: int = 0) -> int:
         return int(input(msg))
     except ValueError:
         return def_
+
+
+def safename(value: str) -> str:
+
+    return safename_re.sub(' ', value)
 
 
 def conv_title(file: str) -> str:
@@ -358,12 +367,12 @@ def tagmp3(
 
         newdir = (
             Path('./tagged') /
-            parsed['artist'] /
-            parsed['album']
+            safename(parsed['artist']) /
+            safename(parsed['album'])
         )
         os.makedirs(newdir, exist_ok=True)
 
-        newpath = newdir / (
+        newpath = newdir / safename(
             f"{parsed['track_no']}. " +
             f"{parsed['title']}.mp3"
         )
