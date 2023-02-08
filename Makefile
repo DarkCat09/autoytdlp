@@ -1,8 +1,3 @@
-clean:
-	rm -rf __pycache__/
-	rm -rf .mypy_cache/
-	rm -f lyrics.txt input
-
 deps:
 	python3 -m pip install -r requirements.txt
 
@@ -17,6 +12,15 @@ conv:
 tags:
 	chmod +x ./id3tag.sh
 	./id3tag.sh
+
+clean:
+	rm -rf __pycache__/
+	rm -rf .mypy_cache/
+	rm -f lyrics.txt input
+
+rmfiles:
+	rm -rf files/
+	rm -rf convert/
 
 pyformat:
 	python3 -m autopep8 --in-place .*.py
