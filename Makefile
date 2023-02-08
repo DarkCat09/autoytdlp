@@ -3,6 +3,9 @@ clean:
 	rm -rf .mypy_cache/
 	rm -f lyrics.txt input
 
+deps:
+	python3 -m pip install -r requirements.txt
+
 run:
 	chmod +x ./autoytdlp.sh
 	./autoytdlp.sh
