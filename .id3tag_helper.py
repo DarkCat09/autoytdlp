@@ -31,6 +31,8 @@ USERAGENT = (
 
 LYRICS_ROW = '.main-page>.row>.col-xs-12'
 
+EDITMSG = 'edit'
+
 safename_re = re.compile(
     r'[^A-Za-z0-9А-ЯЁа-яё \'".,()\[\]&!#$@_~=*+-]'
 )
@@ -107,7 +109,7 @@ def main() -> None:
             print(err)
 
             if isinstance(err, ParseError) \
-            and err.parsing_obj == 'edit':
+            and err.parsing_obj == EDITMSG:
                 pass
 
             else:
@@ -312,7 +314,7 @@ def parse_azlyrics(link: str) -> None:
     print('Correct something?')
 
     if input('[y/N] ').lower == 'y':
-        manual_info_input(False)
+        raise ParseError('edit')
     else:
         print()
 
