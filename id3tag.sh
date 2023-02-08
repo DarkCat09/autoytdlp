@@ -20,3 +20,5 @@ echo
 
 find "$directory" -type f -name "*.mp3" -exec \
 python3 ./.id3tag_helper.py "$copy_arg" {} \;
+
+rm -f ./input

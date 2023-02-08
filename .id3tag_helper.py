@@ -11,7 +11,7 @@ import mimetypes
 import subprocess
 
 from typing import TypedDict
-from typing import Optional
+from typing import Optional, Any
 
 import re
 
@@ -51,6 +51,16 @@ class ParseResult(TypedDict):
     cover_mime: Optional[str]
 
 
+parsed = ParseResult(
+    title='', artist='',
+    album='', year=0,
+    track_no=0, tracks=0,
+    lyrics='',
+    cover=None,
+    cover_mime=None,
+)
+
+
 class ParseError(Exception):
 
     def __init__(self, parsing_obj: str) -> None:
@@ -58,9 +68,12 @@ class ParseError(Exception):
         super().__init__(
             f'Unable to parse {parsing_obj}'
         )
+        self.parsing_obj = parsing_obj
 
 
 def main() -> None:
+
+    global parsed
 
     copy = int(sys.argv[1]) == 1
     file = sys.argv[2]
@@ -76,34 +89,64 @@ def main() -> None:
     print('Title:', title)
     correct = input().strip()
 
-    parsed: Optional[ParseResult] = None
-
     if correct == '!--':
-        parsed = manual_info_input()
+        manual_info_input()
+
     else:
+
         if correct != '':
             title = correct.lower()
+
         try:
             url = search_azurl(title)
             print(url)
-            parsed = parse_azlyrics(url)
+            parse_azlyrics(url)
+
         except Exception as err:
+
             print(err)
-            print(
-                'In most cases, this error means '
-                'the script have received some incorrect data, '
-                'so you should enter song info manually.'
-            )
-            parsed = manual_info_input()
+
+            if isinstance(err, ParseError) \
+            and err.parsing_obj == 'edit':
+                pass
+
+            else:
+                print(
+                    'In most cases, this error means that '
+                    'the script have received some incorrect data, '
+                    'so you should enter song info manually.'
+                )
+
+            manual_info_input(False)
 
     #print(parsed)
     tagmp3(file, parsed, copy)
 
 
+def input(msg: str = '', def_: Any = '') -> str:
+
+    subprocess.call(
+        (
+            f'read -e -r -i "{def_}" -p "{msg}" input; '
+            'echo -n "$input" >./input'
+        ),
+        shell=True,
+        executable='bash',
+    )
+
+    try:
+        with open('./input', 'rt', encoding='utf-8') as f:
+            return f.read() \
+                .removesuffix('\n') \
+                .removesuffix('\r')
+    except Exception:
+        return def_
+
+
 def input_num(msg: str, def_: int = 0) -> int:
 
     try:
-        return int(input(msg))
+        return int(input(msg, def_))
     except ValueError:
         return def_
 
@@ -149,17 +192,15 @@ def search_azurl(title: str) -> str:
         'https://searx.dc09.ru/search',
         params={
             'q': f'{title} site:azlyrics.com',
-            'category_general': 1,
             'language': 'ru-RU',
-            'time_range': '',
             'safesearch': 0,
-            'theme': 'simple',
         },
     )
 
     soup = BeautifulSoup(page.text, 'html.parser')
     link = soup.select_one(
-        'div#urls>article>h3>a[href*="azlyrics.com/lyrics/"]'
+        'div#urls>article>h3>a'
+        '[href*="azlyrics.com/lyrics/"]'
     )
 
     if link is None:
@@ -168,16 +209,9 @@ def search_azurl(title: str) -> str:
     return str(link.get('href'))
 
 
-def parse_azlyrics(link: str) -> ParseResult:
+def parse_azlyrics(link: str) -> None:
 
-    result = ParseResult(
-        title='', artist='',
-        album='', year=0,
-        track_no=0, tracks=0,
-        lyrics='',
-        cover=None,
-        cover_mime=None,
-    )
+    global parsed
 
     print('Please wait...')
 
@@ -192,19 +226,23 @@ def parse_azlyrics(link: str) -> ParseResult:
     )
     if lyrics is None:
         raise ParseError('song lyrics')
-    result['lyrics'] = lyrics.get_text().strip()
+    parsed['lyrics'] = lyrics.get_text().strip()
 
-    artist_elem = soup.select_one(f'{LYRICS_ROW}>.lyricsh>h2')
-    if artist_elem is None:
-        raise ParseError('artist name')
-    result['artist'] = artist_elem.get_text() \
-        .removesuffix(' Lyrics') \
-        .strip()
+    lyrics_file = Path('.') / 'lyrics.txt'
+    with lyrics_file.open('wt', encoding='utf-8') as f:
+        f.write(parsed['lyrics'])
 
     title_elem = soup.select_one(f'{LYRICS_ROW}>b')
     if title_elem is None:
         raise ParseError('song title')
-    result['title'] = title_elem.get_text().strip('" ')
+    parsed['title'] = title_elem.get_text().strip('" ')
+
+    artist_elem = soup.select_one(f'{LYRICS_ROW}>.lyricsh>h2')
+    if artist_elem is None:
+        raise ParseError('artist name')
+    parsed['artist'] = artist_elem.get_text() \
+        .removesuffix(' Lyrics') \
+        .strip()
 
     album_blocks = soup.select('.songinalbum_title')
     album = None
@@ -223,8 +261,8 @@ def parse_azlyrics(link: str) -> ParseResult:
     if album_re is None:
         raise ParseError('album name')
     
-    result['album'] = album_re[1]
-    result['year'] = int(album_re[2])
+    parsed['album'] = album_re[1]
+    parsed['year'] = int(album_re[2])
 
     cover = album.select_one('img.album-image')
 
@@ -235,8 +273,8 @@ def parse_azlyrics(link: str) -> ParseResult:
             cover_url = BASEURL + cover_url
 
         req = session.get(cover_url)
-        result['cover'] = req.content
-        result['cover_mime'] = req.headers.get(
+        parsed['cover'] = req.content
+        parsed['cover_mime'] = req.headers.get(
             'Content-Type', 'image/jpeg'
         )
     
@@ -246,14 +284,14 @@ def parse_azlyrics(link: str) -> ParseResult:
         tracklist = tracklist_elem.select(
             '.listalbum-item'
         )
-        result['tracks'] = len(tracklist)
+        parsed['tracks'] = len(tracklist)
 
         current_url = re.search(
             r'/(lyrics/.+?\.html)',
             link,
         )
 
-        result['track_no'] = 0
+        parsed['track_no'] = 0
         if current_url is not None:
             for i, track in enumerate(tracklist):
 
@@ -263,23 +301,32 @@ def parse_azlyrics(link: str) -> ParseResult:
 
                 track_href = str(track_url.get('href'))
                 if current_url[0] in track_href:
-                    result['track_no'] = (i + 1)
+                    parsed['track_no'] = (i + 1)
                     break
+    
+    print('Succesfully parsed')
+    print('Title:', parsed['title'])
+    print('Artist:', parsed['artist'])
+    print('Album:', parsed['album'])
+    print('Track:', parsed['track_no'], '/', parsed['tracks'])
+    print('Correct something?')
 
-    return result
+    if input('[y/N] ').lower == 'y':
+        manual_info_input(False)
+    else:
+        print()
 
 
-def manual_info_input() -> ParseResult:
+def manual_info_input(overwrite_lyrics: bool = True) -> None:
 
-    result = ParseResult(
-        title=input('Song title: '),
-        artist=input('Artist name: '),
-        album=input('Album name: '),
-        year=input_num('Release year: '),
-        track_no=input_num('Track #'),
-        tracks=input_num('Tracks in album: '),
-        lyrics='', cover=None, cover_mime=None,
-    )
+    global parsed
+
+    parsed['title'] = input('Song title: ', parsed['title'])
+    parsed['artist'] = input('Artist name: ', parsed['artist'])
+    parsed['album'] = input('Album name: ', parsed['album'])
+    parsed['year'] = input_num('Release year: ', parsed['year'])
+    parsed['track_no'] = input_num('Track #', parsed['track_no'])
+    parsed['tracks'] = input_num('Tracks in album: ', parsed['tracks'])
 
     editor = os.getenv('EDITOR', 'nano')
     print('Now, paste the lyrics into a text editor')
@@ -292,8 +339,10 @@ def manual_info_input() -> ParseResult:
 
     try:
         lyrics_file = Path('.') / 'lyrics.txt'
-        with lyrics_file.open('wt') as f:
-            f.write('\n')
+
+        if overwrite_lyrics or not lyrics_file.exists():
+            with lyrics_file.open('wt') as f:
+                f.write('\n')
 
         subprocess.call([
             editor,
@@ -302,14 +351,14 @@ def manual_info_input() -> ParseResult:
 
         print('Reading file...')
         with open('lyrics.txt', 'rt', encoding='utf-8') as f:
-            result['lyrics'] = f.read().strip()
+            parsed['lyrics'] = f.read().strip()
         print('Done')
 
     except OSError as err:
         logging.exception(err)
 
     cover = input('Insert an album cover? [Y/n] ')
-    if cover.lower() not in ('n','н'):
+    if cover.lower() != 'n':
         try:
             print(
                 'Download the cover and enter its path:',
@@ -319,16 +368,16 @@ def manual_info_input() -> ParseResult:
             cover_file = Path(input().strip())
 
             with cover_file.open('rb') as f:
-                result['cover'] = f.read()
+                parsed['cover'] = f.read()
 
-            result['cover_mime'] = (
+            parsed['cover_mime'] = (
                 mimetypes.guess_type(cover_file)[0]
                 or 'image/jpeg'
             )
         except Exception as err:
             logging.exception(err)
     
-    return result
+    print()
 
 
 def tagmp3(

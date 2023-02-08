@@ -1,5 +1,9 @@
 files/
 convert/
 tagged/
-.vscode/
 lyrics.txt
+input
+
+__pycache__/
+.vscode/
+.idea/
