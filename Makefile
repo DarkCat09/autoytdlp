@@ -1,5 +1,6 @@
 clean:
 	rm -rf __pycache__/
+	rm -rf .mypy_cache/
 	rm -f lyrics.txt input
 
 run:
@@ -15,8 +16,8 @@ tags:
 	./id3tag.sh
 
 pyformat:
-	python3 -m autopep8 --in-place ./*.py
+	python3 -m autopep8 --in-place .*.py
 
 pycheck:
-	python3 -m mypy ./*.py
-	python3 -m pylint -j $(nproc) ./*.py
+	python3 -m mypy .*.py
+	python3 -m pylint -j4 .*.py

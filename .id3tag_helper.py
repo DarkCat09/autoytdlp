@@ -16,9 +16,9 @@ from typing import Optional, Any
 import re
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup  # type: ignore
 
-from mutagen.id3 import ID3
+from mutagen.id3 import ID3  # type: ignore
 from mutagen.id3 import TPE1, TIT2, TALB
 from mutagen.id3 import TYER, TRCK
 from mutagen.id3 import USLT, APIC
@@ -30,8 +30,6 @@ USERAGENT = (
 )
 
 LYRICS_ROW = '.main-page>.row>.col-xs-12'
-
-EDITMSG = 'edit'
 
 safename_re = re.compile(
     r'[^A-Za-z0-9А-ЯЁа-яё \'".,()\[\]&!#$@_~=*+-]'
@@ -53,6 +51,18 @@ class ParseResult(TypedDict):
     cover_mime: Optional[str]
 
 
+class ParseError(Exception):
+
+    EDIT = 'edit'
+
+    def __init__(self, parsing_obj: str) -> None:
+
+        super().__init__(
+            f'Unable to parse {parsing_obj}'
+        )
+        self.parsing_obj = parsing_obj
+
+
 parsed = ParseResult(
     title='', artist='',
     album='', year=0,
@@ -61,16 +71,6 @@ parsed = ParseResult(
     cover=None,
     cover_mime=None,
 )
-
-
-class ParseError(Exception):
-
-    def __init__(self, parsing_obj: str) -> None:
-
-        super().__init__(
-            f'Unable to parse {parsing_obj}'
-        )
-        self.parsing_obj = parsing_obj
 
 
 def main() -> None:
@@ -108,9 +108,11 @@ def main() -> None:
 
             print(err)
 
+            # pylint: disable=no-member
             if isinstance(err, ParseError) \
-            and err.parsing_obj == EDITMSG:
+                    and err.parsing_obj == ParseError.EDIT:
                 pass
+            # pylint: enable=no-member
 
             else:
                 print(
@@ -121,10 +123,10 @@ def main() -> None:
 
             manual_info_input(False)
 
-    #print(parsed)
-    tagmp3(file, parsed, copy)
+    tagmp3(file, copy)
 
 
+# pylint: disable=redefined-builtin
 def input(msg: str = '', def_: Any = '') -> str:
 
     subprocess.call(
@@ -143,6 +145,7 @@ def input(msg: str = '', def_: Any = '') -> str:
                 .removesuffix('\r')
     except Exception:
         return def_
+# pylint: enable=redefined-builtin
 
 
 def input_num(msg: str, def_: int = 0) -> int:
@@ -189,10 +192,10 @@ def conv_title(file: str) -> str:
 def search_azurl(title: str) -> str:
 
     print('Searching...')
-    
+
     page = session.get(
         'https://searx.dc09.ru/search',
-        params={
+        params={  # type: ignore
             'q': f'{title} site:azlyrics.com',
             'language': 'ru-RU',
             'safesearch': 0,
@@ -207,7 +210,7 @@ def search_azurl(title: str) -> str:
 
     if link is None:
         raise ParseError('song URL')
-    
+
     return str(link.get('href'))
 
 
@@ -219,7 +222,7 @@ def parse_azlyrics(link: str) -> None:
 
     page = session.get(link)
     soup = BeautifulSoup(page.text, 'html.parser')
-    
+
     lyrics = soup.select_one(
         f'{LYRICS_ROW}>div'
         ':not(.div-share)'
@@ -262,7 +265,7 @@ def parse_azlyrics(link: str) -> None:
     )
     if album_re is None:
         raise ParseError('album name')
-    
+
     parsed['album'] = album_re[1]
     parsed['year'] = int(album_re[2])
 
@@ -279,7 +282,7 @@ def parse_azlyrics(link: str) -> None:
         parsed['cover_mime'] = req.headers.get(
             'Content-Type', 'image/jpeg'
         )
-    
+
     tracklist_elem = soup.select_one('.songlist-panel')
     if tracklist_elem is not None:
 
@@ -305,7 +308,7 @@ def parse_azlyrics(link: str) -> None:
                 if current_url[0] in track_href:
                     parsed['track_no'] = (i + 1)
                     break
-    
+
     print('Succesfully parsed')
     print('Title:', parsed['title'])
     print('Artist:', parsed['artist'])
@@ -314,9 +317,9 @@ def parse_azlyrics(link: str) -> None:
     print('Correct something?')
 
     if input('[y/N] ').lower == 'y':
-        raise ParseError('edit')
-    else:
-        print()
+        raise ParseError(ParseError.EDIT)
+
+    print()
 
 
 def manual_info_input(overwrite_lyrics: bool = True) -> None:
@@ -378,18 +381,19 @@ def manual_info_input(overwrite_lyrics: bool = True) -> None:
             )
         except Exception as err:
             logging.exception(err)
-    
+
     print()
 
 
 def tagmp3(
         file: str,
-        parsed: ParseResult,
         copy: bool) -> None:
+
+    global parsed
 
     oldpath = Path(file)
     newpath = oldpath
-    
+
     if copy:
 
         newdir = (
@@ -414,7 +418,7 @@ def tagmp3(
             cover = newdir / f'cover{ext}'
             with cover.open('wb') as f:
                 f.write(parsed['cover'])
-    
+
     id3 = ID3(str(newpath))
     id3['TPE1'] = TPE1(text=parsed['artist'])
     id3['TIT2'] = TIT2(text=parsed['title'])
