@@ -316,7 +316,8 @@ def parse_azlyrics(link: str) -> None:
     print('Track:', parsed['track_no'], '/', parsed['tracks'])
     print('Correct something?')
 
-    if input('[y/N] ').lower == 'y':
+    if input('[y/N] ').lower() == 'y':
+        print('Raising ParseError')  # <-- TODO
         raise ParseError(ParseError.EDIT)
 
     print()
